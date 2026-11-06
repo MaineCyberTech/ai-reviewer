@@ -1,0 +1,89 @@
+name: ai-review
+
+# Reusable advisory AI review. Call this from a consumer repository:
+#
+# jobs:
+#   review:
+#     uses: MaineCyberTech/ai-reviewer/.github/workflows/ai-review.yml@main
+#     secrets: inherit
+#     with:
+#       pr: ${{ inputs.pr || 0 }}
+on:
+  workflow_call:
+    inputs:
+      pr:
+        description: Pull request number, or 0 to use the current pull_request event
+        required: false
+        type: number
+        default: 0
+      model:
+        description: Optional model override
+        required: false
+        type: string
+        default: ""
+    secrets:
+      AI_REVIEW_ENDPOINT:
+        required: true
+      AI_REVIEW_API_KEY:
+        required: true
+      AI_REVIEW_MODEL:
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: >-
+      ${{
+        inputs.pr != 0 ||
+        (github.event.pull_request.draft == false &&
+         github.event.pull_request.head.repo.full_name == github.repository)
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout consumer repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Checkout the reviewer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: MaineCyberTech/ai-reviewer
+          ref: main
+          path: .ai-reviewer
+          fetch-depth: 1
+
+      - name: Review the PR diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr || github.event.pull_request.number }}
+          AI_REVIEW_ENDPOINT: ${{ secrets.AI_REVIEW_ENDPOINT }}
+          AI_REVIEW_API_KEY: ${{ secrets.AI_REVIEW_API_KEY }}
+          AI_REVIEW_MODEL: ${{ inputs.model || secrets.AI_REVIEW_MODEL || 'qwen2.5-coder:3b' }}
+        run: |
+          set -Eeuo pipefail
+          if [ -z "${AI_REVIEW_ENDPOINT:-}" ] || [ -z "${AI_REVIEW_API_KEY:-}" ]; then
+            echo "AI_REVIEW_ENDPOINT and AI_REVIEW_API_KEY secrets are required." >&2
+            exit 1
+          fi
+          mkdir -p .ai-review
+          gh pr view "$PR_NUMBER" --json title,body,files > .ai-review/pr.json
+          gh pr diff "$PR_NUMBER" > .ai-review/pr.diff
+
+          python3 .ai-reviewer/.github/scripts/ai_review.py \
+            "$AI_REVIEW_MODEL" \
+            .ai-reviewer/.github/prompts/ai-review.md \
+            .ai-review/pr.json \
+            .ai-review/pr.diff > .ai-review/review.md
+
+          {
+            printf '## AI review (advisory)\n\n'
+            printf '_Independent AI review of this diff. This is not a GitHub approval; a human must review and approve._\n\n'
+            cat .ai-review/review.md
+          } > .ai-review/comment.md
+
+          gh pr comment "$PR_NUMBER" --body-file .ai-review/comment.md

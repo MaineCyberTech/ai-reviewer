@@ -1,0 +1,18 @@
+[Unit]
+Description=Authenticated proxy for the Kestrel AI reviewer
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=-/etc/kestrel-ai-proxy/env
+ExecStart=/usr/bin/python3 /opt/kestrel-ai-proxy/proxy.py
+Restart=on-failure
+RestartSec=3s
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

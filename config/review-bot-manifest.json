@@ -1,0 +1,14 @@
+{
+  "name": "Kestrel Review Bot",
+  "description": "Independent review and, when explicitly enabled, approval for MaineCyberTech pull requests.",
+  "url": "https://github.com/MaineCyberTech",
+  "redirect_url": "https://github.com/MaineCyberTech",
+  "public": false,
+  "default_permissions": {
+    "checks": "read",
+    "contents": "read",
+    "metadata": "read",
+    "pull_requests": "write"
+  },
+  "default_events": ["pull_request"]
+}
