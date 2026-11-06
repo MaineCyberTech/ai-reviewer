@@ -4,7 +4,7 @@ name: ai-review
 #
 # jobs:
 #   review:
-#     uses: MaineCyberTech/ai-reviewer/.github/workflows/ai-review.yml@main
+#     uses: MaineCyberTech/ai-reviewer/.github/workflows/ai-review.yml@REPLACE_WITH_AI_REVIEWER_SHA
 #     secrets: inherit
 #     with:
 #       pr: ${{ inputs.pr || 0 }}

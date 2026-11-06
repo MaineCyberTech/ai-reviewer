@@ -7,7 +7,7 @@ name: bot-approval
 #     types: [labeled]
 # jobs:
 #   approve:
-#     uses: MaineCyberTech/ai-reviewer/.github/workflows/bot-approval.yml@main
+#     uses: MaineCyberTech/ai-reviewer/.github/workflows/bot-approval.yml@REPLACE_WITH_AI_REVIEWER_SHA
 #
 # A maintainer applies the `bot-approve` label after reviewing. The workflow
 # verifies the advisory AI review and required checks, then submits an approval

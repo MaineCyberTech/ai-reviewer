@@ -16,7 +16,10 @@ permissions:
 
 jobs:
   review:
-    uses: MaineCyberTech/ai-reviewer/.github/workflows/ai-review.yml@main
-    secrets: inherit
+    uses: MaineCyberTech/ai-reviewer/.github/workflows/ai-review.yml@REPLACE_WITH_AI_REVIEWER_SHA
+    secrets:
+      AI_REVIEW_ENDPOINT: ${{ secrets.AI_REVIEW_ENDPOINT }}
+      AI_REVIEW_API_KEY: ${{ secrets.AI_REVIEW_API_KEY }}
+      AI_REVIEW_MODEL: ${{ secrets.AI_REVIEW_MODEL }}
     with:
       pr: ${{ inputs.pr || 0 }}

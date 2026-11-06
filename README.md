@@ -62,8 +62,11 @@ permissions:
 
 jobs:
   review:
-    uses: MaineCyberTech/ai-reviewer/.github/workflows/ai-review.yml@main
-    secrets: inherit
+    uses: MaineCyberTech/ai-reviewer/.github/workflows/ai-review.yml@REPLACE_WITH_AI_REVIEWER_SHA
+    secrets:
+      AI_REVIEW_ENDPOINT: ${{ secrets.AI_REVIEW_ENDPOINT }}
+      AI_REVIEW_API_KEY: ${{ secrets.AI_REVIEW_API_KEY }}
+      AI_REVIEW_MODEL: ${{ secrets.AI_REVIEW_MODEL }}
     with:
       pr: ${{ inputs.pr || 0 }}
 ```
@@ -84,10 +87,18 @@ permissions:
 
 jobs:
   approve:
-    uses: MaineCyberTech/ai-reviewer/.github/workflows/bot-approval.yml@main
+    uses: MaineCyberTech/ai-reviewer/.github/workflows/bot-approval.yml@REPLACE_WITH_AI_REVIEWER_SHA
 ```
 
 Then create the `bot-approve` label in the consuming repository.
+Pin the `uses:` reference to a full 40-character commit SHA, not `@main`.
+Many repository security gates (including the MaineCyberTech portal) reject
+unpinned external actions. Get the current SHA with:
+
+```sh
+git ls-remote https://github.com/MaineCyberTech/ai-reviewer.git refs/heads/main
+```
+
 
 The calling repository must allow GitHub Actions to approve pull requests
 (Settings → Actions → General → Workflow permissions → **Allow GitHub Actions
