@@ -15,10 +15,5 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Syntax
         run: |
-          python3 -m py_compile .github/scripts/ai_review.py proxy/proxy.py
-          python3 - <<'PY'
-          import yaml
-          for path in (".github/workflows/ai-review.yml", ".github/workflows/bot-approval.yml"):
-              yaml.safe_load(open(path, encoding="utf-8"))
-              print(f"OK {path}")
-          PY
+          python3 -m py_compile .github/scripts/ai_review.py proxy/proxy.py scripts/validate.py
+          python3 scripts/validate.py
