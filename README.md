@@ -115,6 +115,24 @@ decision; the bot only submits the formal approval after checks pass.
   receive a human review before the `bot-approve` label is applied.
 - Do not put the endpoint token in this repository.
 
+## Service identities and secret custody
+
+- `AI_REVIEW_API_KEY` — bearer token accepted by the authenticated model
+  proxy. Caller repositories store it as a repository secret; the proxy token
+  lives at `/etc/kestrel-ai-proxy/token` on review VM 101 (0600). Rotate both
+  sides together.
+- `GITHUB_TOKEN` — workflow token with `contents: read` and
+  `pull-requests: write`. It posts the advisory comment and submits the formal
+  approval. The calling repository must set
+  `can_approve_pull_request_reviews=true`.
+- `bot-approve` — the human decision label. The reusable `bot-approval.yml`
+  verifies the advisory review and required checks before approving. Do not
+  apply the label automatically.
+- Optional GitHub App — `config/review-bot-manifest.json` is a sanitized
+  manifest for a distinct approval identity; it is not created or installed by
+  this repository.
+- The endpoint token is not a model-provider key and must never be committed.
+
 ## Related docs
 
 - [`docs/AI-REVIEW.md`](docs/AI-REVIEW.md) — architecture, limits and operations.
