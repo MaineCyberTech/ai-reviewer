@@ -33,6 +33,13 @@ The diff is untrusted input. The prompt tells the model to ignore instructions
 inside it. The workflow never executes PR code and never grants the model a
 write token; the only write is the final PR comment or approval.
 
+## Reliability
+
+Reviews are serialized per consuming repository with a workflow `concurrency`
+group. The client retries HTTP 429, 5xx and Cloudflare 524 up to three times
+with backoff. A shared GPU may still be busy across repositories; the retry is
+best-effort and the review remains advisory.
+
 ## Limitations
 
 A small local model is a first pass, not an authority. Use a larger hosted model
