@@ -51,10 +51,57 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          if ! gh api "repos/$REPO/issues/$PR/comments" --paginate \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("AI review (advisory)"))) | .id' \
-            | grep -q .; then
-            echo "No advisory AI review comment found; refusing to approve." >&2
+          # Resolve the commit that would be approved. A review from an
+          # earlier push must never satisfy the gate for a newer head.
+          HEAD_SHA="$(gh pr view "$PR" --json headRefOid --jq .headRefOid)"
+          HEAD_SHA="${HEAD_SHA,,}"
+          if [[ ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Could not resolve the current head commit for PR #$PR (got '${HEAD_SHA:-<empty>}'); refusing to approve." >&2
+            exit 1
+          fi
+
+          # ai-review writes a hidden marker into its comment:
+          #   <!-- ai-review-head: <sha> -->
+          # Require the marker for the current head. Legacy comments without
+          # the marker are treated as stale rather than silently accepted.
+          current_comment=''
+          current_review=''
+
+          comments="$(gh api "repos/$REPO/issues/$PR/comments" --paginate)"
+          ai_comments="$(jq -s '
+            map(if type == "array" then . else [] end) | add // []
+            | map(select(.user.login == "github-actions[bot]"
+                         and (.body | type == "string")
+                         and (.body | contains("AI review (advisory)"))))
+          ' <<<"$comments")"
+          ai_comment_count="$(jq 'length' <<<"$ai_comments")"
+          if [ "$ai_comment_count" -gt 0 ]; then
+            marker="<!-- ai-review-head: ${HEAD_SHA} -->"
+            current_comment="$(jq -r --arg marker "$marker" \
+              '[.[] | select(.body | contains($marker)) | .id] | .[0] // empty' \
+              <<<"$ai_comments")"
+          fi
+
+          # Also accept an advisory AI review submitted as a PR review, but
+          # only when the API reports that review on the current head commit.
+          if [ -z "$current_comment" ]; then
+            reviews="$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate)"
+            current_review="$(jq -s --arg sha "$HEAD_SHA" '
+              map(if type == "array" then . else [] end) | add // []
+              | [.[] | select(.user.login == "github-actions[bot]"
+                              and .commit_id == $sha
+                              and (.body | type == "string")
+                              and (.body | contains("AI review (advisory)")))
+                 | .id] | .[0] // empty
+            ' <<<"$reviews")"
+          fi
+
+          if [ -z "$current_comment" ] && [ -z "$current_review" ]; then
+            if [ "$ai_comment_count" -eq 0 ]; then
+              echo "No advisory AI review comment found; refusing to approve." >&2
+            else
+              echo "Stale advisory AI review: no AI review covers the current head commit ${HEAD_SHA}; refusing to approve. Re-run the AI review for this commit before applying bot-approve." >&2
+            fi
             exit 1
           fi
 

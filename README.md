@@ -106,15 +106,25 @@ commit the caller pinned — and refuses to run if the resolved ref is not a ful
 tag names are rejected. Pass only the three `AI_REVIEW_*` secrets explicitly;
 do not use `secrets: inherit`.
 
+Dependabot-triggered runs and PRs from forks do not receive repository Actions
+secrets. The reusable workflow treats an empty `AI_REVIEW_ENDPOINT` or
+`AI_REVIEW_API_KEY` as an advisory skip: it emits a notice, exits successfully,
+and posts no comment or approval. To review Dependabot PRs, add the
+`AI_REVIEW_*` values as Dependabot secrets in the consuming repository.
+
 The calling repository must allow GitHub Actions to approve pull requests
 (Settings → Actions → General → Workflow permissions → **Allow GitHub Actions
 to create and approve pull requests**). The label is the human approval
 decision; the bot only submits the formal approval after checks pass.
 
-Bot approval fails closed. If `gh pr checks --required` exits non-zero
-(including API/authentication errors), returns empty or malformed JSON, or
-reports that no required checks are configured, the workflow refuses to
-approve. At least one required context must resolve to a non-failed state.
+Bot approval fails closed. It resolves the PR's current `headRefOid` and only
+accepts an advisory AI review comment carrying the matching
+`<!-- ai-review-head: <sha> -->` marker (or an advisory PR review whose API
+`commit_id` is that head). A comment from an earlier push, or a legacy comment
+without the marker, is rejected as stale. If `gh pr checks --required` exits
+non-zero (including API/authentication errors), returns empty or malformed
+JSON, or reports that no required checks are configured, the workflow refuses
+to approve. At least one required context must resolve to a non-failed state.
 
 ## Security
 
@@ -124,7 +134,10 @@ approve. At least one required context must resolve to a non-failed state.
 - Reviewer code is executed from the same immutable commit SHA as the pinned
   reusable workflow, verified before use; `reviewer_ref` only accepts a full
   commit SHA.
-- The only write is the advisory PR comment or the approval review.
+- The only write is the advisory PR comment or the approval review. A skipped
+  review (missing Dependabot/fork secrets) writes nothing and approves nothing.
+- Bot approval only accepts an AI review for the current head commit; stale or
+  marker-less comments are refused.
 - Bot approval refuses to approve when the required-check query fails, returns
   empty/malformed data, or finds no required contexts.
 - Protected changes (workflows, infra, auth, migrations, secrets) should still
