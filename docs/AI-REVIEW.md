@@ -23,6 +23,18 @@ A maintainer reviews the PR, then applies the `bot-approve` label. The separate
 `bot-approval.yml` workflow verifies the advisory AI review and required checks
 and submits the formal approval with the caller's `GITHUB_TOKEN`.
 
+The approval step fails closed. A non-zero `gh pr checks --required` exit
+(other than the documented pending exit 8), empty output, malformed JSON, no
+required contexts, or any failed/pending required check stops the workflow
+without approving. It never treats a failed query as "zero pending checks".
+
+The caller must pin the reusable workflow to a full 40-character commit SHA.
+The review workflow checks out the reviewer source at `job.workflow_sha`, the
+same commit that defines the called workflow, verifies the checkout's `HEAD`
+matches, and refuses branch/tag refs. An optional `reviewer_ref` input can
+select another full commit SHA but is validated the same way. Pass only the
+three `AI_REVIEW_*` secrets explicitly instead of `secrets: inherit`.
+
 The consuming repository must allow GitHub Actions to approve pull requests:
 Settings → Actions → General → Workflow permissions → **Allow GitHub Actions to
 create and approve pull requests**.

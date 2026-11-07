@@ -58,8 +58,55 @@ jobs:
             exit 1
           fi
 
+          # Fail closed. A failed, empty or malformed `gh pr checks` query must
+          # never be interpreted as "no pending checks". Exit 8 means checks are
+          # pending; every other non-zero exit is a hard refusal.
+          CHECKS_JSON=''
+          CHECKS_PENDING=0
+          query_required_checks() {
+            local output rc err
+            CHECKS_JSON=''
+            CHECKS_PENDING=0
+            err="$(mktemp)"
+            set +e
+            output="$(gh pr checks "$PR" --required --json name,state 2>"$err")"
+            rc=$?
+            set -e
+
+            if [ "$rc" -ne 0 ] && [ "$rc" -ne 8 ]; then
+              if grep -qi 'no required checks' "$err"; then
+                echo "No required checks are configured; refusing to approve without verified required checks." >&2
+              elif [ -n "$output" ] && jq -e 'type == "array" and length > 0' >/dev/null 2>&1 <<<"$output"; then
+                echo "Required checks are not all green (gh exit $rc); refusing to approve." >&2
+                jq -r '.[] | "\(.name): \(.state)"' <<<"$output" >&2 || true
+              else
+                echo "Failed to query required checks (gh exit $rc); refusing to approve." >&2
+              fi
+              if [ -s "$err" ]; then sed 's/^/  /' "$err" >&2; fi
+              rm -f "$err"
+              return 1
+            fi
+
+            if [ -z "$output" ] || ! jq -e 'type == "array" and length > 0' >/dev/null 2>&1 <<<"$output"; then
+              echo "Required-check query returned no usable JSON (gh exit $rc); refusing to approve." >&2
+              if [ -s "$err" ]; then sed 's/^/  /' "$err" >&2; fi
+              rm -f "$err"
+              return 1
+            fi
+
+            if [ "$rc" -eq 8 ]; then
+              CHECKS_PENDING=1
+            fi
+            CHECKS_JSON="$output"
+            rm -f "$err"
+            return 0
+          }
+
           for _ in $(seq 1 60); do
-            checks="$(gh pr checks "$PR" --required --json name,state)" || checks='[]'
+            if ! query_required_checks; then
+              exit 1
+            fi
+            checks="$CHECKS_JSON"
             failed="$(jq '[.[] | select(.state == "FAILURE" or .state == "CANCELLED" or .state == "TIMED_OUT" or .state == "ACTION_REQUIRED")] | length' <<<"$checks")"
             pending="$(jq '[.[] | select(.state == "PENDING" or .state == "QUEUED" or .state == "IN_PROGRESS" or .state == "EXPECTED")] | length' <<<"$checks")"
             if [ "$failed" -gt 0 ]; then
@@ -67,15 +114,24 @@ jobs:
               jq -r '.[] | "\(.name): \(.state)"' <<<"$checks" >&2
               exit 1
             fi
-            if [ "$pending" -eq 0 ]; then
+            if [ "$pending" -eq 0 ] && [ "$CHECKS_PENDING" -eq 0 ]; then
               break
             fi
             sleep 20
           done
 
-          checks="$(gh pr checks "$PR" --required --json name,state)" || checks='[]'
+          if ! query_required_checks; then
+            exit 1
+          fi
+          checks="$CHECKS_JSON"
+          failed="$(jq '[.[] | select(.state == "FAILURE" or .state == "CANCELLED" or .state == "TIMED_OUT" or .state == "ACTION_REQUIRED")] | length' <<<"$checks")"
           pending="$(jq '[.[] | select(.state == "PENDING" or .state == "QUEUED" or .state == "IN_PROGRESS" or .state == "EXPECTED")] | length' <<<"$checks")"
-          if [ "$pending" -gt 0 ]; then
+          if [ "$failed" -gt 0 ]; then
+            echo "Required checks are failing; refusing to approve." >&2
+            jq -r '.[] | "\(.name): \(.state)"' <<<"$checks" >&2
+            exit 1
+          fi
+          if [ "$pending" -gt 0 ] || [ "$CHECKS_PENDING" -ne 0 ]; then
             echo "Required checks did not finish in time; refusing to approve." >&2
             exit 1
           fi

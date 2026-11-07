@@ -5,9 +5,16 @@ name: ai-review
 # jobs:
 #   review:
 #     uses: MaineCyberTech/ai-reviewer/.github/workflows/ai-review.yml@REPLACE_WITH_AI_REVIEWER_SHA
-#     secrets: inherit
 #     with:
 #       pr: ${{ inputs.pr || 0 }}
+#     secrets:
+#       AI_REVIEW_ENDPOINT: ${{ secrets.AI_REVIEW_ENDPOINT }}
+#       AI_REVIEW_API_KEY: ${{ secrets.AI_REVIEW_API_KEY }}
+#       AI_REVIEW_MODEL: ${{ secrets.AI_REVIEW_MODEL }}
+#
+# Pin `uses:` to a full 40-character commit SHA. The reviewer checkout below
+# defaults to job.workflow_sha, the commit that defines this reusable workflow,
+# so the code executed is the same immutable revision the caller pinned.
 on:
   workflow_call:
     inputs:
@@ -18,6 +25,14 @@ on:
         default: 0
       model:
         description: Optional model override
+        required: false
+        type: string
+        default: ""
+      reviewer_ref:
+        description: >-
+          Optional full 40-character commit SHA of MaineCyberTech/ai-reviewer
+          to execute. Empty means the commit that defines this reusable
+          workflow (job.workflow_sha).
         required: false
         type: string
         default: ""
@@ -54,14 +69,42 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve reviewer commit
+        id: reviewer-ref
+        env:
+          INPUT_REF: ${{ inputs.reviewer_ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          set -Eeuo pipefail
+          reviewer_ref="${INPUT_REF:-$WORKFLOW_SHA}"
+          reviewer_ref="${reviewer_ref,,}"
+          if [[ ! "$reviewer_ref" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::reviewer_ref must resolve to a full 40-character commit SHA (got '${reviewer_ref:-<empty>}'); refusing to execute mutable reviewer code." >&2
+            exit 1
+          fi
+          printf 'sha=%s\n' "$reviewer_ref" >> "$GITHUB_OUTPUT"
 
       - name: Checkout the reviewer
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: MaineCyberTech/ai-reviewer
-          ref: main
+          ref: ${{ steps.reviewer-ref.outputs.sha }}
           path: .ai-reviewer
           fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify reviewer checkout
+        env:
+          EXPECTED_SHA: ${{ steps.reviewer-ref.outputs.sha }}
+        run: |
+          set -Eeuo pipefail
+          actual_sha="$(git -C .ai-reviewer rev-parse HEAD)"
+          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
+            echo "::error::Reviewer checkout resolved to $actual_sha, expected $EXPECTED_SHA; refusing to execute mutable reviewer code." >&2
+            exit 1
+          fi
 
       - name: Review the PR diff
         env:
