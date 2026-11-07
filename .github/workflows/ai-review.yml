@@ -37,10 +37,13 @@ on:
         type: string
         default: ""
     secrets:
+      # Optional so Dependabot and fork PRs can run this workflow and skip
+      # cleanly: those events do not receive repository Actions secrets, and a
+      # missing secret must not turn the advisory review into a red check.
       AI_REVIEW_ENDPOINT:
-        required: true
+        required: false
       AI_REVIEW_API_KEY:
-        required: true
+        required: false
       AI_REVIEW_MODEL:
         required: false
 
@@ -115,11 +118,26 @@ jobs:
           AI_REVIEW_MODEL: ${{ inputs.model || secrets.AI_REVIEW_MODEL || 'qwen2.5-coder:3b' }}
         run: |
           set -Eeuo pipefail
+
+          # Dependabot-triggered runs and PRs from forks do not receive
+          # repository Actions secrets. The review is advisory, so an empty
+          # endpoint/key is a successful skip, not a failed check.
           if [ -z "${AI_REVIEW_ENDPOINT:-}" ] || [ -z "${AI_REVIEW_API_KEY:-}" ]; then
-            echo "AI_REVIEW_ENDPOINT and AI_REVIEW_API_KEY secrets are required." >&2
+            echo "::notice title=AI review skipped::AI_REVIEW_ENDPOINT or AI_REVIEW_API_KEY is not available for this event (Dependabot PR or fork). The advisory AI review was skipped; no review comment was posted and nothing was approved."
+            exit 0
+          fi
+
+          mkdir -p .ai-review
+
+          # Tie the comment to the exact commit that was reviewed so bot
+          # approval can reject a review left over from an earlier push.
+          head_sha="$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)"
+          head_sha="${head_sha,,}"
+          if [[ ! "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Could not resolve the PR head commit (got '${head_sha:-<empty>}'); refusing to post a review that cannot be tied to a commit." >&2
             exit 1
           fi
-          mkdir -p .ai-review
+
           gh pr view "$PR_NUMBER" --json title,body,files > .ai-review/pr.json
           gh pr diff "$PR_NUMBER" > .ai-review/pr.diff
 
@@ -131,6 +149,8 @@ jobs:
 
           {
             printf '## AI review (advisory)\n\n'
+            printf '<!-- ai-review-head: %s -->\n' "$head_sha"
+            printf 'Reviewed head commit: `%s`\n\n' "$head_sha"
             printf '_Independent AI review of this diff. This is not a GitHub approval; a human must review and approve._\n\n'
             cat .ai-review/review.md
           } > .ai-review/comment.md

@@ -8,7 +8,12 @@ severity and a merge recommendation.
 1. Reads the consumer PR title, body, file list and diff.
 2. Caps the diff at 30 KB and treats it as untrusted data.
 3. Sends the diff to the configured OpenAI-compatible endpoint.
-4. Posts a Markdown comment.
+4. Posts a Markdown comment that records the reviewed head commit.
+
+If `AI_REVIEW_ENDPOINT` or `AI_REVIEW_API_KEY` is unavailable (a Dependabot PR
+or a fork), the workflow emits a notice and skips successfully. It posts no
+comment and approves nothing. Add the values as Dependabot secrets if those PRs
+should be reviewed.
 
 ## What it does not do
 
@@ -22,6 +27,13 @@ severity and a merge recommendation.
 A maintainer reviews the PR, then applies the `bot-approve` label. The separate
 `bot-approval.yml` workflow verifies the advisory AI review and required checks
 and submits the formal approval with the caller's `GITHUB_TOKEN`.
+
+The approval step resolves the PR's current `headRefOid` and only accepts an
+advisory AI review comment whose `<!-- ai-review-head: <sha> -->` marker
+matches that head (or an advisory PR review whose API `commit_id` matches). A
+comment left over from an earlier push, or a legacy comment without the marker,
+is rejected as stale with a clear message. This prevents a review of an older
+commit from satisfying the gate after a new push.
 
 The approval step fails closed. A non-zero `gh pr checks --required` exit
 (other than the documented pending exit 8), empty output, malformed JSON, no
