@@ -99,18 +99,34 @@ unpinned external actions. Get the current SHA with:
 git ls-remote https://github.com/MaineCyberTech/ai-reviewer.git refs/heads/main
 ```
 
+The reusable workflow checks out the reviewer at `job.workflow_sha` — the same
+commit the caller pinned — and refuses to run if the resolved ref is not a full
+40-character SHA. It also verifies the checkout's `HEAD` matches that SHA.
+`reviewer_ref` may override this with another full commit SHA, but branch and
+tag names are rejected. Pass only the three `AI_REVIEW_*` secrets explicitly;
+do not use `secrets: inherit`.
 
 The calling repository must allow GitHub Actions to approve pull requests
 (Settings → Actions → General → Workflow permissions → **Allow GitHub Actions
 to create and approve pull requests**). The label is the human approval
 decision; the bot only submits the formal approval after checks pass.
 
+Bot approval fails closed. If `gh pr checks --required` exits non-zero
+(including API/authentication errors), returns empty or malformed JSON, or
+reports that no required checks are configured, the workflow refuses to
+approve. At least one required context must resolve to a non-failed state.
+
 ## Security
 
 - The model endpoint is protected by a bearer token; the proxy returns `401`
   without it.
 - The workflow never executes PR code and never gives the model a write token.
+- Reviewer code is executed from the same immutable commit SHA as the pinned
+  reusable workflow, verified before use; `reviewer_ref` only accepts a full
+  commit SHA.
 - The only write is the advisory PR comment or the approval review.
+- Bot approval refuses to approve when the required-check query fails, returns
+  empty/malformed data, or finds no required contexts.
 - Protected changes (workflows, infra, auth, migrations, secrets) should still
   receive a human review before the `bot-approve` label is applied.
 - Do not put the endpoint token in this repository.
