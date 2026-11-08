@@ -20,6 +20,11 @@ on:
         required: false
         type: string
         default: bot-approve
+      runs-on:
+        description: JSON array of runner labels
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
 
 permissions:
   contents: read
@@ -35,7 +40,7 @@ jobs:
         github.event.sender.type == 'User' &&
         github.event.pull_request.user.login != 'github-actions[bot]'
       }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 20
     steps:
       - name: Checkout consumer repository

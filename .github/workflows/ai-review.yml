@@ -28,6 +28,11 @@ on:
         required: false
         type: string
         default: ""
+      runs-on:
+        description: JSON array of runner labels
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
       reviewer_ref:
         description: >-
           Optional full 40-character commit SHA of MaineCyberTech/ai-reviewer
@@ -65,7 +70,7 @@ jobs:
         (github.event.pull_request.draft == false &&
          github.event.pull_request.head.repo.full_name == github.repository)
       }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 20
     steps:
       - name: Checkout consumer repository
