@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   validate:
-    runs-on: [self-hosted, lab, lab-python]
+    runs-on: [self-hosted, Linux, X64, lab, lab-docker, harrier-managed]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Syntax
