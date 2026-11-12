@@ -462,5 +462,25 @@ class BotApprovalFailClosedTests(unittest.TestCase):
         self.assertIn("Could not resolve the current head commit", result.stderr)
 
 
+class ForkRunnerTests(unittest.TestCase):
+    """Fork PRs must never run on the persistent self-hosted lab runner."""
+
+    def test_validate_routes_fork_prs_to_hosted(self) -> None:
+        workflow = load_workflow("validate.yml")
+        runs_on = workflow["jobs"]["validate"]["runs-on"]
+        self.assertIsInstance(runs_on, str)
+        self.assertIn("github.event.pull_request.head.repo.full_name", runs_on)
+        self.assertIn("ubuntu-latest", runs_on)
+        self.assertIn("self-hosted", runs_on)
+
+    def test_reusable_review_routes_fork_prs_to_hosted(self) -> None:
+        workflow = load_workflow("ai-review.yml")
+        runs_on = workflow["jobs"]["review"]["runs-on"]
+        self.assertIsInstance(runs_on, str)
+        self.assertIn("github.event.pull_request.head.repo.full_name", runs_on)
+        self.assertIn("ubuntu-latest", runs_on)
+        self.assertIn("inputs.runs-on", runs_on)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
