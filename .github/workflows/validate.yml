@@ -10,7 +10,9 @@ permissions:
 
 jobs:
   validate:
-    runs-on: [self-hosted, lab, lab-python]
+    # Fork PRs must never execute on the persistent self-hosted lab runner.
+    # Same-repo PRs and main keep the existing lab runner.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","lab","lab-python"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Syntax

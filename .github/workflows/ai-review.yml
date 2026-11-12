@@ -70,7 +70,10 @@ jobs:
         (github.event.pull_request.draft == false &&
          github.event.pull_request.head.repo.full_name == github.repository)
       }}
-    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    # Defense in depth for callers that opt into a self-hosted runner: a fork
+    # PR is always routed to GitHub-hosted ubuntu-latest, never to the lab.
+    # Same-repo callers keep the runner requested through `runs-on`.
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON(inputs.runs-on) }}
     timeout-minutes: 20
     steps:
       - name: Checkout consumer repository
