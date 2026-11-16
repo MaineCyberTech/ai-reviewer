@@ -147,7 +147,23 @@ jobs:
           fi
 
           gh pr view "$PR_NUMBER" --json title,body,files > .ai-review/pr.json
-          gh pr diff "$PR_NUMBER" > .ai-review/pr.diff
+
+          diff_fallback=0
+          if ! gh pr diff "$PR_NUMBER" > .ai-review/pr.diff 2> .ai-review/diff.err; then
+            if grep -q "HTTP 406" .ai-review/diff.err; then
+              echo "::notice title=AI review diff fallback::GitHub refused the full diff (over 20,000 lines); using per-file patches, truncated to the reviewer budget."
+              diff_fallback=1
+              gh api --paginate \
+                "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
+                --jq '.[] | "diff --git a/\(.filename) b/\(.filename)\n--- a/\(.filename)\n+++ b/\(.filename)\n\(.patch // "[patch unavailable]")"' \
+                > .ai-review/pr.files.diff
+              head -c 200000 .ai-review/pr.files.diff > .ai-review/pr.diff
+              rm -f .ai-review/pr.files.diff
+            else
+              cat .ai-review/diff.err >&2
+              exit 1
+            fi
+          fi
 
           python3 .ai-reviewer/.github/scripts/ai_review.py \
             "$AI_REVIEW_MODEL" \
@@ -160,6 +176,9 @@ jobs:
             printf '<!-- ai-review-head: %s -->\n' "$head_sha"
             printf 'Reviewed head commit: `%s`\n\n' "$head_sha"
             printf '_Independent AI review of this diff. This is not a GitHub approval; a human must review and approve._\n\n'
+            if [ "$diff_fallback" = "1" ]; then
+              printf '_GitHub refused the full diff (over 20,000 lines); this review used per-file patches and was truncated to the 30 KB reviewer budget._\n\n'
+            fi
             cat .ai-review/review.md
           } > .ai-review/comment.md
 
